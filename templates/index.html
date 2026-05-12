@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PIB UPSC Digest</title>
+<!-- PWA Manifest -->
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0d6efd">
+<!-- iOS meta tags -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="PIB Digest">
+<link rel="apple-touch-icon" href="/icon-192.png">
+
+<style>
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    max-width: 700px;
+    margin: 1.5rem auto;
+    padding: 0 1rem;
+    background: #f0f2f5;
+    color: #212529;
+  }
+  h1 {
+    color: #0d6efd;
+    font-size: 1.8rem;
+    margin-bottom: 0.5rem;
+  }
+  button {
+    background: #0d6efd;
+    color: white;
+    border: none;
+    padding: 0.7rem 1.2rem;
+    font-size: 1rem;
+    border-radius: 6px;
+    cursor: pointer;
+    margin: 1rem 0;
+  }
+  button:hover {
+    background: #0b5ed7;
+  }
+  .digest {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  }
+  .article {
+    margin-bottom: 2rem;
+  }
+  .article h2 {
+    font-size: 1.25rem;
+    border-bottom: 2px solid #dee2e6;
+    padding-bottom: 0.3rem;
+    margin-top: 0;
+    color: #1a1a1a;
+  }
+  .bullets {
+    margin-top: 0.5rem;
+    padding-left: 1.2rem;
+  }
+  .bullets li {
+    margin-bottom: 0.4rem;
+    line-height: 1.5;
+    text-align: justify;
+  }
+  .source-link {
+    font-size: 0.85rem;
+    color: #6c757d;
+    margin-top: 0.5rem;
+  }
+  .source-link a {
+    color: #0d6efd;
+    text-decoration: none;
+  }
+  #status {
+    margin: 0.5rem 0;
+    font-style: italic;
+    color: #555;
+  }
+  /* Install banner */
+  #installBanner {
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    display: none;
+    margin-bottom: 1rem;
+    text-align: center;
+  }
+  #installBanner button {
+    margin: 0.2rem 0.5rem;
+    padding: 0.4rem 0.8rem;
+    font-size: 0.9rem;
+  }
+</style>
+</head>
+<body>
+<h1>📰 PIB UPSC Digest</h1>
+<div id="installBanner">
+  📲 Install this app on your phone for quick access!
+  <button onclick="installApp()">Install</button>
+  <button onclick="document.getElementById('installBanner').style.display='none'">Dismiss</button>
+</div>
+<button onclick="refreshDigest()">🔄 Refresh Today's Digest</button>
+<div id="status"></div>
+<div class="digest" id="container">
+  <p>Click the button to fetch the latest UPSC-relevant articles as bullet points.</p>
+</div>
+
+<script>
+  // PWA Install prompt
+  let deferredPrompt;
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    document.getElementById('installBanner').style.display = 'block';
+  });
+
+  async function installApp() {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const result = await deferredPrompt.userChoice;
+      deferredPrompt = null;
+      document.getElementById('installBanner').style.display = 'none';
+    }
+  }
+
+  async function refreshDigest() {
+    const status = document.getElementById('status');
+    const container = document.getElementById('container');
+    status.innerText = "Fetching and summarizing... This may take 30-60 seconds.";
+    container.innerHTML = "<p>Loading…</p>";
+
+    try {
+      const res = await fetch('/fetch');
+      const data = await res.json();
+      if (data.error) {
+        container.innerHTML = `<p>Error: ${data.error}</p>`;
+        status.innerText = "";
+        return;
+      }
+      if (!data.articles.length) {
+        container.innerHTML = `<h3>${data.date}</h3><p>No relevant articles found today.</p>`;
+        status.innerText = "";
+        return;
+      }
+
+      let html = `<h3>${data.date}</h3>`;
+      data.articles.forEach((article, idx) => {
+        html += `<div class="article">
+          <h2>${idx+1}. ${article.title}</h2>`;
+        if (article.bullets && article.bullets.length) {
+          html += `<ul class="bullets">`;
+          article.bullets.forEach(bullet => {
+            html += `<li>${bullet}</li>`;
+          });
+          html += `</ul>`;
+        } else {
+          html += `<p>No summary available.</p>`;
+        }
+        html += `<div class="source-link"><a href="${article.link}" target="_blank">🔗 Full Press Release</a></div></div>`;
+      });
+      container.innerHTML = html;
+      status.innerText = `Updated at ${new Date().toLocaleTimeString()}`;
+    } catch (e) {
+      container.innerHTML = `<p>Error fetching digest. Please try again later.</p>`;
+      status.innerText = "";
+      console.error(e);
+    }
+  }
+
+  // Register service worker for offline caching
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    });
+  }
+</script>
+</body>
+</html>
