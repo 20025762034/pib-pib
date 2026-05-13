@@ -4,15 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PIB UPSC Digest</title>
-<!-- PWA Manifest -->
-<link rel="manifest" href="/manifest.json">
+<link rel="manifest" href="/static/manifest.json">
 <meta name="theme-color" content="#0d6efd">
-<!-- iOS meta tags -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="PIB Digest">
-<link rel="apple-touch-icon" href="/icon-192.png">
-
+<link rel="apple-touch-icon" href="/static/icon-192.png">
 <style>
   body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -27,6 +24,19 @@
     font-size: 1.8rem;
     margin-bottom: 0.5rem;
   }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.8rem;
+    margin: 1rem 0;
+  }
+  .controls input[type="date"] {
+    padding: 0.5rem;
+    font-size: 1rem;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+  }
   button {
     background: #0d6efd;
     color: white;
@@ -35,7 +45,6 @@
     font-size: 1rem;
     border-radius: 6px;
     cursor: pointer;
-    margin: 1rem 0;
   }
   button:hover {
     background: #0b5ed7;
@@ -79,7 +88,6 @@
     font-style: italic;
     color: #555;
   }
-  /* Install banner */
   #installBanner {
     background: #fff3cd;
     border: 1px solid #ffc107;
@@ -94,6 +102,16 @@
     padding: 0.4rem 0.8rem;
     font-size: 0.9rem;
   }
+  #quickDates {
+    margin-top: 0.3rem;
+    font-size: 0.9rem;
+  }
+  #quickDates a {
+    margin-right: 10px;
+    cursor: pointer;
+    color: #0d6efd;
+    text-decoration: underline;
+  }
 </style>
 </head>
 <body>
@@ -103,38 +121,52 @@
   <button onclick="installApp()">Install</button>
   <button onclick="document.getElementById('installBanner').style.display='none'">Dismiss</button>
 </div>
-<button onclick="refreshDigest()">🔄 Refresh Today's Digest</button>
+
+<div class="controls">
+  <label for="dateInput">Select Date:</label>
+  <input type="date" id="dateInput">
+  <button onclick="fetchDigest()">🔍 Fetch Digest</button>
+  <button onclick="fetchToday()">📅 Today</button>
+</div>
+<div id="quickDates">
+  Quick: <a onclick="setDate(-1)">Yesterday</a> | <a onclick="setDate(-2)">2 days ago</a> | <a onclick="setDate(-7)">1 week ago</a>
+</div>
 <div id="status"></div>
 <div class="digest" id="container">
-  <p>Click the button to fetch the latest UPSC-relevant articles as bullet points.</p>
+  <p>Choose a date and click "Fetch Digest" to see the bullet‑point summary.</p>
 </div>
 
 <script>
-  // PWA Install prompt
-  let deferredPrompt;
-  window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    deferredPrompt = e;
-    document.getElementById('installBanner').style.display = 'block';
-  });
+  // Set date input to today by default
+  function formatDateInput(d) {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+  const today = new Date();
+  document.getElementById('dateInput').value = formatDateInput(today);
 
-  async function installApp() {
-    if (deferredPrompt) {
-      deferredPrompt.prompt();
-      const result = await deferredPrompt.userChoice;
-      deferredPrompt = null;
-      document.getElementById('installBanner').style.display = 'none';
-    }
+  function getSelectedDate() {
+    const val = document.getElementById('dateInput').value; // yyyy-mm-dd
+    const parts = val.split('-');
+    if (parts.length !== 3) return null;
+    return `${parts[2]}/${parts[1]}/${parts[0]}`; // dd/mm/yyyy for backend
   }
 
-  async function refreshDigest() {
+  async function fetchDigest() {
+    const dateStr = getSelectedDate();
+    if (!dateStr) {
+      alert("Please select a valid date.");
+      return;
+    }
     const status = document.getElementById('status');
     const container = document.getElementById('container');
-    status.innerText = "Fetching and summarizing... This may take 30-60 seconds.";
+    status.innerText = `Fetching digest for ${dateStr}...`;
     container.innerHTML = "<p>Loading…</p>";
 
     try {
-      const res = await fetch('/fetch');
+      const res = await fetch(`/fetch?date=${dateStr}`);
       const data = await res.json();
       if (data.error) {
         container.innerHTML = `<p>Error: ${data.error}</p>`;
@@ -142,7 +174,7 @@
         return;
       }
       if (!data.articles.length) {
-        container.innerHTML = `<h3>${data.date}</h3><p>No relevant articles found today.</p>`;
+        container.innerHTML = `<h3>${data.date}</h3><p>No relevant articles found for this date.</p>`;
         status.innerText = "";
         return;
       }
@@ -163,18 +195,45 @@
         html += `<div class="source-link"><a href="${article.link}" target="_blank">🔗 Full Press Release</a></div></div>`;
       });
       container.innerHTML = html;
-      status.innerText = `Updated at ${new Date().toLocaleTimeString()}`;
+      status.innerText = `Showing ${data.articles.length} articles for ${data.date}`;
     } catch (e) {
       container.innerHTML = `<p>Error fetching digest. Please try again later.</p>`;
       status.innerText = "";
-      console.error(e);
     }
   }
 
-  // Register service worker for offline caching
+  function fetchToday() {
+    document.getElementById('dateInput').value = formatDateInput(new Date());
+    fetchDigest();
+  }
+
+  function setDate(daysOffset) {
+    const d = new Date();
+    d.setDate(d.getDate() + daysOffset);
+    document.getElementById('dateInput').value = formatDateInput(d);
+    fetchDigest();
+  }
+
+  // PWA install logic
+  let deferredPrompt;
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    document.getElementById('installBanner').style.display = 'block';
+  });
+
+  async function installApp() {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+      deferredPrompt = null;
+      document.getElementById('installBanner').style.display = 'none';
+    }
+  }
+
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/sw.js').catch(() => {});
+      navigator.serviceWorker.register('/static/sw.js').catch(() => {});
     });
   }
 </script>
